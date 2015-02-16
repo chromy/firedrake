@@ -14,7 +14,7 @@ import constant
 from finat.pyop2_interface import pyop2_kernel
 
 
-__all__ = ['par_loop', 'direct', 'READ', 'WRITE', 'RW', 'INC']
+__all__ = ['par_loop', 'finat_loop', 'direct', 'READ', 'WRITE', 'RW', 'INC']
 
 
 class _DirectLoop(object):
@@ -321,7 +321,11 @@ def finat_loop(kernel, measure, args, interpreter=False, **kwargs):
 
     mesh = _find_mesh(measure, args)
 
-    op2args = [pyop2_kernel(kernel, args.keys(), interpreter)]
+    largs = args.copy()
+
+    out = largs.pop("output", None)
+
+    op2args = [pyop2_kernel(kernel, largs.keys(), interpreter)]
 
     op2args.append(_map['itspace'](mesh, measure))
 
@@ -333,6 +337,9 @@ def finat_loop(kernel, measure, args, interpreter=False, **kwargs):
             return c.dat[idx](intent, m.split[idx] if m else None)
         return f.dat(intent, _map['nodes'](f))
 
-    op2args += [mkarg(func, intent) for (func, intent) in args.itervalues()]
+    if (out):
+        op2args += (mkarg(*out))
+
+    op2args += [mkarg(func, intent) for (func, intent) in largs.itervalues()]
 
     return pyop2.par_loop(*op2args)
