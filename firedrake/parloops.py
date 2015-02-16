@@ -89,6 +89,33 @@ def _form_kernel(kernel, measure, args, **kwargs):
                         "par_loop_kernel", **kwargs)
 
 
+def _find_mesh(measure, args):
+
+    if measure is direct:
+        mesh = None
+        for (func, intent) in args.itervalues():
+            if isinstance(func, Indexed):
+                c, i = func.operands()
+                idx = i._indices[0]._value
+                if mesh and c.node_set[idx] is not mesh:
+                    raise ValueError("Cannot mix sets in direct loop.")
+                mesh = c.node_set[idx]
+            else:
+                try:
+                    if mesh and func.node_set is not mesh:
+                        raise ValueError("Cannot mix sets in direct loop.")
+                    mesh = func.node_set
+                except AttributeError:
+                    # Argument was a Global.
+                    pass
+        if not mesh:
+            raise TypeError("No Functions passed to direct par_loop")
+    else:
+        mesh = measure.subdomain_data().function_space().mesh()
+
+    return mesh
+
+
 def par_loop(kernel, measure, args, **kwargs):
     """A :func:`par_loop` is a user-defined operation which reads and
     writes :class:`.Function`\s by looping over the mesh cells or facets
@@ -203,39 +230,107 @@ def par_loop(kernel, measure, args, **kwargs):
 
     _map = _maps[measure.integral_type()]
 
-    if measure is direct:
-        mesh = None
-        for (func, intent) in args.itervalues():
-            if isinstance(func, Indexed):
-                c, i = func.operands()
-                idx = i._indices[0]._value
-                if mesh and c.node_set[idx] is not mesh:
-                    raise ValueError("Cannot mix sets in direct loop.")
-                mesh = c.node_set[idx]
-            else:
-                try:
-                    if mesh and func.node_set is not mesh:
-                        raise ValueError("Cannot mix sets in direct loop.")
-                    mesh = func.node_set
-                except AttributeError:
-                    # Argument was a Global.
-                    pass
-        if not mesh:
-            raise TypeError("No Functions passed to direct par_loop")
-    else:
-        mesh = measure.subdomain_data().function_space().mesh()
+    mesh = _find_mesh(measure, args)
 
     op2args = [_form_kernel(kernel, measure, args, **kwargs)]
 
     op2args.append(_map['itspace'](mesh, measure))
 
     def mkarg(f, intent):
-        if isinstance(func, Indexed):
-            c, i = func.operands()
+        if isinstance(f, Indexed):
+            c, i = f.operands()
             idx = i._indices[0]._value
             m = _map['nodes'](c)
             return c.dat[idx](intent, m.split[idx] if m else None)
         return f.dat(intent, _map['nodes'](f))
+
+    op2args += [mkarg(func, intent) for (func, intent) in args.itervalues()]
+
+    return pyop2.par_loop(*op2args)
+
+
+def finat_loop(kernel, measure, args, interpreter=False, **kwargs):
+    """A :func:`finat_par_loop` provides a mechanism for the execution of
+    kernels written in the FInAT language.
+
+    :arg kernel: the FInAT :class:`~finat.utils.Kernel` to be executed.
+    :arg measure: is a UFL :class:`~ufl.measure.Measure` which determines the
+        manner in which the iteration over the mesh is to occur.
+        Alternatively, you can pass :data:`direct` to designate a direct loop.
+    :arg args: is a dictionary mapping Pymbolic variables in the kernel to
+        :class:`.Function`\s or components of mixed :class:`.Function`\s and
+        indicates how these :class:`.Function`\s are to be accessed.
+    :arg interpreter: if set to True, the FInAT interpreter will be used
+        instead of compiling a pure PyOP2 Kernel.
+    :arg kwargs: additional keyword arguments are passed to the
+        :class:`~pyop2.op2.Kernel` constructor
+
+    **Argument definitions**
+
+    Each item in the `args` dictionary maps a Pymbolic variable to a
+    tuple containing a :class:`.Function` or :class:`.Constant` and an
+    argument intent. The argument intent indicates how the kernel
+    will access this variable:
+
+    `READ`
+       The variable will be read but not written to.
+    `WRITE`
+       The variable will be written to but not read. If multiple kernel
+       invocations write to the same DoF, then the order of these writes
+       is undefined.
+    `RW`
+       The variable will be both read and written to. If multiple kernel
+       invocations access the same DoF, then the order of these accesses
+       is undefined, but it is guaranteed that no race will occur.
+    `INC`
+       The variable will be added into using +=. As before, the order in
+       which the kernel invocations increment the variable is undefined,
+       but there is a guarantee that no races will occur.
+
+    .. note::
+
+       Only `READ` intents are valid for :class:`.Constant`
+       coefficients, and an error will be raised in other cases.
+
+    **The measure**
+
+    The measure determines the mesh entities over which the iteration
+    will occur, and the size of the kernel stencil. The iteration will
+    occur over the same mesh entities as if the measure had been used
+    to define an integral, and the stencil will likewise be the same
+    as the integral case. That is to say, if the measure is a volume
+    measure, the kernel will be called once per cell and the DoFs
+    accessible to the kernel will be those associated with the cell,
+    its facets, edges and vertices. If the measure is a facet measure
+    then the iteration will occur over the corresponding class of
+    facets and the accessible DoFs will be those on the cell(s)
+    adjacent to the facet, and on the facets, edges and vertices
+    adjacent to those facets.
+
+    A direct loop over nodes without any indirections can be specified
+    by passing :data:`direct` as the measure. In this case, all of the
+    arguments must be :class:`.Function`\s in the same
+    :class:`.FunctionSpace` or in the corresponding
+    :class:`.VectorFunctionSpace`.
+
+    """
+
+    _map = _maps[measure.integral_type()]
+
+    mesh = _find_mesh(measure, args)
+
+    op2args = [_form_finat_kernel(kernel, measure, args, **kwargs)]
+
+    op2args.append(_map['itspace'](mesh, measure))
+
+    def mkarg(f, intent):
+        if isinstance(f, Indexed):
+            c, i = f.operands()
+            idx = i._indices[0]._value
+            m = _map['nodes'](c)
+            return c.dat[idx](intent, m.split[idx] if m else None)
+        return f.dat(intent, _map['nodes'](f))
+
     op2args += [mkarg(func, intent) for (func, intent) in args.itervalues()]
 
     return pyop2.par_loop(*op2args)
