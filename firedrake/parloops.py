@@ -11,6 +11,8 @@ import coffee.base as ast
 
 import constant
 
+from finat.pyop2_interface import pyop2_kernel
+
 
 __all__ = ['par_loop', 'direct', 'READ', 'WRITE', 'RW', 'INC']
 
@@ -319,7 +321,7 @@ def finat_loop(kernel, measure, args, interpreter=False, **kwargs):
 
     mesh = _find_mesh(measure, args)
 
-    op2args = [_form_finat_kernel(kernel, measure, args, **kwargs)]
+    op2args = [pyop2_kernel(kernel, args.keys(), interpreter)]
 
     op2args.append(_map['itspace'](mesh, measure))
 
