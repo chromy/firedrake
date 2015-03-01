@@ -11,7 +11,7 @@ import coffee.base as ast
 
 import constant
 
-from finat.pyop2_interface import pyop2_kernel
+from finat.pyop2_interface import pyop2_kernel_function
 
 
 __all__ = ['par_loop', 'finat_loop', 'direct', 'READ', 'WRITE', 'RW', 'INC']
@@ -325,7 +325,7 @@ def finat_loop(kernel, measure, args, interpreter=False, **kwargs):
 
     out = largs.pop("output", None)
 
-    op2args = [pyop2_kernel(kernel, largs.keys(), interpreter)]
+    op2args = [pyop2_kernel_function(kernel, largs.keys(), interpreter)]
 
     op2args.append(_map['itspace'](mesh, measure))
 
