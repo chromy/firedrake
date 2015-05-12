@@ -181,8 +181,8 @@ class FFCKernel(DiskCached):
         :arg name: a prefix to be applied to the compiled kernel names. This is primarily useful for debugging.
         :arg parameters: a dict of parameters to pass to the form compiler.
         """
-        if self._initialized:
-            return
+        #if self._initialized:
+        #    return
 
         incl = [PreprocessNode('#include "firedrake_geometry.h"\n')]
         inc = [path.dirname(__file__)]

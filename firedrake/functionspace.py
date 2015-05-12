@@ -118,8 +118,8 @@ class FunctionSpaceBase(ObjectCached):
                 self.dof_classes[i] += ndofs * mesh._entity_classes[d, i]
 
         # Tell the DM about the layout of the global vector
-        with function.Function(self).dat.vec_ro as v:
-            self._dm.setGlobalVector(v.duplicate())
+        #with function.Function(self).dat.vec_ro as v:
+        #    self._dm.setGlobalVector(v.duplicate())
 
         self._node_count = self._global_numbering.getStorageSize()
 
@@ -629,8 +629,8 @@ class MixedFunctionSpace(FunctionSpaceBase):
         self._index = None
         self._initialized = True
         dm = PETSc.DMShell().create()
-        with function.Function(self).dat.vec_ro as v:
-            dm.setGlobalVector(v.duplicate())
+        #with function.Function(self).dat.vec_ro as v:
+        #    dm.setGlobalVector(v.duplicate())
         dm.setAttr('__fs__', weakref.ref(self))
         dm.setCreateFieldDecomposition(self.create_field_decomp)
         self._dm = dm
